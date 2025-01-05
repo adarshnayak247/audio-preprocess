@@ -49,18 +49,15 @@ def replace_lastest(string, old, new):
     default="whisper",
     show_default=True,
 )
-@click.option(
-    "--compute-type",
-    help="compute type (whisper only), allowed: float16, float32, int8, int8_float16 default float16",
-    default="float16",
-    show_default=True,
-)
+
 @click.option(
     "--batch-size",
     help="batch size (whisper only), 1 for not batched model",
-    default="float16",
+    default=1,
+    type=int,
     show_default=True,
 )
+
 def transcribe(
     input_dir: str,
     num_workers: int,
@@ -68,7 +65,7 @@ def transcribe(
     model_size: str,
     recursive: bool,
     model_type: ASRModelType,
-    compute_type: str,
+  
     batch_size: int,
 ):
     """
@@ -115,7 +112,6 @@ def transcribe(
                     model_type=model_type,
                     lang=lang,
                     pos=len(tasks),
-                    compute_type=compute_type,
                     batch_size=batch_size,
                 )
             )

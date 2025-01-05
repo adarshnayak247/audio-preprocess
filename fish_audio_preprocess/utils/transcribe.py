@@ -1,7 +1,6 @@
 import re
 from pathlib import Path
 from typing import Literal
-
 from loguru import logger
 from tqdm import tqdm
 
@@ -13,44 +12,54 @@ PROMPT = {
 
 ASRModelType = Literal["funasr", "whisper"]
 
-
 def batch_transcribe(
     files: list[Path],
     model_size: str,
     model_type: ASRModelType,
     lang: str,
     pos: int,
-    compute_type: str,
     batch_size: int = 1,
 ):
     results = {}
+    
     if model_type == "whisper":
         from faster_whisper import WhisperModel
 
         if lang == "jp":
             lang = "ja"
-            logger.info(
-                f"Language {lang} is not supported by whisper, using ja(japenese) instead"
-            )
+            logger.info(f"Language {lang} is not supported by whisper, using ja(japanese) instead")
 
         logger.info(f"Loading {model_size} model for {lang} transcription")
         kwargs = {}
         if not batch_size or batch_size == 1:
-            model = WhisperModel(model_size, compute_type=compute_type)
+            device = "cpu"
+            model = WhisperModel(model_size,device=device)
         else:
             from faster_whisper.transcribe import BatchedInferencePipeline
-
-            model = BatchedInferencePipeline(model_size, compute_type=compute_type)
+            model = BatchedInferencePipeline(model_size)
             kwargs["batch_size"] = batch_size
+
         for file in tqdm(files, position=pos):
             if lang in PROMPT:
-                result = model.transcribe(
-                    file, language=lang, initial_prompt=PROMPT[lang], **kwargs
-                )
+                result = model.transcribe(file, language=lang, initial_prompt=PROMPT[lang], **kwargs)
             else:
                 result = model.transcribe(file, language=lang, **kwargs)
-            result = list(result)
-            results[str(file)] = result["text"]
+
+            # Debugging: log the result to understand its format
+            logger.info(f"Transcription result for {file}: {result}, Type: {type(result)}")
+            
+            # print("123\n")
+            # print(result)
+            # print("123\n")
+            # print(result[0],"/n")
+            # Handle result depending on its format (tuple or dictionary)
+            # if isinstance(result, tuple):
+            segments_generator = result[0]  # The first element is the generator
+            transcription = "".join([segment.text for segment in segments_generator])  # Join the text from each segment
+            results[str(file)] = transcription
+            # else:
+            #     results[str(file)] = result.get("text", "")  # Handle dictionary structure
+
     elif model_type == "funasr":
         from funasr import AutoModel
         from funasr.utils.postprocess_utils import rich_transcription_postprocess
@@ -74,13 +83,19 @@ def batch_transcribe(
                 )
             else:
                 result = model.generate(input=file, batch_size_s=300)
-            # print(result)
+
+            # Debugging: log the result to understand its format
+            logger.info(f"Transcription result for {file}: {result}, Type: {type(result)}")
+
+            # Handle result depending on its format (list or dictionary)
             if isinstance(result, list):
-                results[str(file)] = "".join(
-                    [re.sub(r"<\|.*?\|>", "", item["text"]) for item in result]
-                )
+                results[str(file)] = "".join([re.sub(r"<\|.*?\|>", "", item["text"]) for item in result])
+            elif isinstance(result, dict):
+                results[str(file)] = result.get("text", "")
             else:
-                results[str(file)] = result["text"]
+                logger.warning(f"Unexpected result format for {file}: {result}")
+
     else:
         raise ValueError(f"Unsupported model type: {model_type}")
+
     return results
